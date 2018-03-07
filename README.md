@@ -13,3 +13,9 @@ python lyrics.py
 
 ## Results
 The results of the script will be stored in the root directory in "Analysis Results" and the responses from the Genius API will all be stored in "Search Response JSON" - this way, rerunning the script will not poll the Genius API again for artist we've already gathered data for.
+
+## Example
+Here's an example of how the data for a certain artist can be displayed with a simple ChartJS graph.
+![Example](https://i.imgur.com/ar1WaK6.png)
+
+A full working example with all my sample data can be found (here)
