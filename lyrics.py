@@ -32,11 +32,25 @@ SEARCH_RESULTS_DIR = 'Search Response JSON'
 LYRIC_COUNTS_JSON_DIR = 'Lyric Counts'
 LYRIC_COUNTS_JSON_FILE = 'lyric_counts.json'
 
+ANALYSIS_RESULTS_DIR = 'Analysis Results'
+ARTIST_ANALYSIS_FILE = 'artist_analysis.json'
+ARTIST_SUMMARY_FILE = 'artist_summary.json'
+GENRE_ANALYSIS_FILE = 'genre_analysis.json'
+GENRE_SUMMARY_FILE = 'genre_summary.json'
+
 CLIENT_ID = 'client_id'
 CLIENT_SECRET = 'client_secret'
 CLIENT_ACCESS_TOKEN = 'client_access_token'
 
 GENRES = ['metal', 'rap', 'pop']
+
+# In case the script has been ran before, attempt to load
+# the previous results as this will prevent re-doing uneccessary work.
+try:
+    with open(os.path.join(ANALYSIS_RESULTS_DIR, ARTIST_ANALYSIS_FILE), 'r') as f:
+        ARTIST_RESULTS = json.load(f)
+except OSError as e:
+    ARTIST_RESULTS = {}
 
 # =====================================
 # - Functions
@@ -55,10 +69,7 @@ def read_artists_json():
         A JSON object containing information
         about a list of artists.
     """
-    artists = None
-    with open('artist_list.json', 'r') as f:
-        artists = json.load(f)
-    return artists
+    return read_json('artist_list.json')
 
 def get_credentials():
     """Retrieves Genius API credentials from a properties file.
@@ -145,11 +156,12 @@ def parse_all_song_data(artists, creds):
         print(artist['artist'])
         # This directory will already exist for artists that have already had lyrical data
         # analyzed. We can skip that artist when that is the case.
-        if not os.path.isdir(os.path.join(SEARCH_RESULTS_DIR, artist['genre'], artist['artist'], LYRIC_COUNTS_JSON_DIR)):
+        if artist['artist'] not in ARTIST_RESULTS:
             artist_lyric_count = Counter()
             artist_json_files = glob.glob(os.path.join(SEARCH_RESULTS_DIR, artist['genre'], artist['artist'], '*.json'))
             parse_artist_data(artist_json_files, creds, artist_lyric_count)
-            save_lyric_count(artist_lyric_count, os.path.join(SEARCH_RESULTS_DIR, artist['genre'], artist['artist']))
+            ARTIST_RESULTS[artist['artist']] = artist_lyric_count
+    save_lyric_count(ARTIST_RESULTS, ARTIST_ANALYSIS_FILE)
 
 def parse_artist_data(files, creds, artist_lyric_count):
     """Reads a directory containing files of artist data."""
@@ -196,30 +208,31 @@ def store_results(artists):
     a way that can be summarized in two text files, one
     for artists, and another for genres.    
     """
-    ANALYSIS_RESULTS_DIR = 'Analysis Results'
     genre_counts_dict = {}
     for genre in GENRES:
         genre_counts_dict[genre] = {}
 
+    with open(os.path.join(ANALYSIS_RESULTS_DIR, ARTIST_ANALYSIS_FILE), 'r') as f:
+        ARTIST_RESULTS = json.load(f)
+
     artists_json = {}
     artist_list = []
     for artist in artists['artists']:
-        artist_counts_file = os.path.join(os.getcwd(), SEARCH_RESULTS_DIR, artist['genre'], artist['artist'], LYRIC_COUNTS_JSON_DIR, LYRIC_COUNTS_JSON_FILE)
         words_and_counts = []
-        with open(artist_counts_file, 'r') as json_dict:
-            artist_counts = json.load(json_dict)
-
+        artist_counts = ARTIST_RESULTS[artist['artist']]
         add_dict(genre_counts_dict[artist['genre']], artist_counts)
 
         for entry in Counter(artist_counts).most_common(100):
             words_and_counts.append(list(entry))
 
         words_and_counts.reverse()
-        counts_dict = { 'title': artist['artist'], 'genre': artist['genre'], 'data': words_and_counts }
+        counts_dict = { 'title': artist['artist'], 'genre': artist['genre'], 'data': words_and_counts, 'uniques': len(artist_counts) }
         artist_list.append(counts_dict)
 
+    save_lyric_count(genre_counts_dict, GENRE_ANALYSIS_FILE)
+
     artists_json['artists'] = artist_list
-    save(artists_json, ANALYSIS_RESULTS_DIR, 'artist_results.json')
+    save(artists_json, ANALYSIS_RESULTS_DIR, ARTIST_SUMMARY_FILE, 'w')
 
     genres_json = {}
     genre_list = []
@@ -230,11 +243,11 @@ def store_results(artists):
             genre_words_and_counts.append(list(entry))
 
         genre_words_and_counts.reverse()
-        genre_counts_results = { 'title': genre, 'data': genre_words_and_counts }
+        genre_counts_results = { 'title': genre, 'data': genre_words_and_counts, 'uniques': len(genre_counts_dict[genre]) }
         genre_list.append(genre_counts_results)
 
     genres_json['genres'] = genre_list
-    save(genres_json, ANALYSIS_RESULTS_DIR, 'genre_results.json')
+    save(genres_json, ANALYSIS_RESULTS_DIR, GENRE_SUMMARY_FILE, 'w')
 
 def add_dict(source, supplement):
     """Combine the counts of two dictionaries into one.
@@ -340,21 +353,28 @@ def remove_common_words(word_list):
 
     return [w for w in word_list if w not in stop_words]
 
+def read_json(file_name):
+    """Open the given file as json and return the result."""
+    result = None
+    with open(file_name, 'r') as f:
+        result = json.load(f)
+    return result
+
 # --- Save Data --- #
 # ----------------- #
 
 def save_json(json_data, artist_name, genre, file_name):
-    """Save JSON data with a file name."""
-    save(json_data, os.path.join(SEARCH_RESULTS_DIR, genre, artist_name), file_name+'.json')
+    """Store Genius API JSON data"""
+    save(json_data, os.path.join(SEARCH_RESULTS_DIR, genre, artist_name), file_name+'.json', 'w')
 
-def save_lyric_count(lyric_count, dir_name):
-    """Save object in a specified directory."""
-    save(lyric_count, os.path.join(dir_name, LYRIC_COUNTS_JSON_DIR), LYRIC_COUNTS_JSON_FILE)
+def save_lyric_count(artist_counts, lyric_file):
+    """Store compiled artist lyrical data"""
+    save(artist_counts, ANALYSIS_RESULTS_DIR, lyric_file, 'w')
 
-def save(data, dir_name, file_name):
+def save(data, dir_name, file_name, mode):
     """Serialize an object and write it to a file."""
     os.makedirs(dir_name, exist_ok=True)
-    with open(os.path.join(dir_name, file_name), 'w') as f:
+    with open(os.path.join(dir_name, file_name), mode) as f:
         json.dump(data, f)
 
 # =====================================
