@@ -192,8 +192,7 @@ def parse_lyrics(songs_file, creds, lyric_dict):
         lyrics = html.find('div', class_='lyrics').get_text().lower()
         lyrics = re.sub(r'\[.*?\]', '', lyrics)
         lyrics = lyrics.translate(str.maketrans('', '', string.punctuation))
-        lyric_set = set(lyrics.split())
-        add_counts_to_dict(lyric_set, lyric_dict)
+        add_counts_to_dict(lyrics.split(), lyric_dict)
 
         sleep(2)    # Sleep for some amount of time so the Genius website doesn't get hammered with requests
 
