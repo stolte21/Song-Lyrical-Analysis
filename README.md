@@ -2,7 +2,7 @@
 Python script that uses the Genius API and web scraping to analyze word frequency in music
 
 ## Getting started
-Update the credentials.ini with your Genius API client ID and modify the artist_list.json to your liking. I filled it with popular metal, rap, and pop artists as a start.
+Update the credentials.ini with your Genius API client ID and modify the artist_list.json to your liking.
 
 ## Running the script
 Once you have your Genius API credentials and the artists you'd like to get results for, run the python script from the root directory.
