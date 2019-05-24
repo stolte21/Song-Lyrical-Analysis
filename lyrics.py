@@ -29,28 +29,29 @@ from bs4 import BeautifulSoup
 # =====================================
 
 SEARCH_RESULTS_DIR = 'Search Response JSON'
-LYRIC_COUNTS_JSON_DIR = 'Lyric Counts'
-LYRIC_COUNTS_JSON_FILE = 'lyric_counts.json'
 
 ANALYSIS_RESULTS_DIR = 'Analysis Results'
-ARTIST_ANALYSIS_FILE = 'artist_analysis.json'
-ARTIST_SUMMARY_FILE = 'artist_summary.json'
-GENRE_ANALYSIS_FILE = 'genre_analysis.json'
-GENRE_SUMMARY_FILE = 'genre_summary.json'
+ARTIST_RESULTS_FILE = 'artist_results.json'
+GENRE_RESULTS_FILE = 'genre_results.json'
 
 CLIENT_ID = 'client_id'
 CLIENT_SECRET = 'client_secret'
 CLIENT_ACCESS_TOKEN = 'client_access_token'
 
-GENRES = ['metal', 'rap', 'pop']
-
 # In case the script has been ran before, attempt to load
 # the previous results as this will prevent re-doing uneccessary work.
 try:
-    with open(os.path.join(ANALYSIS_RESULTS_DIR, ARTIST_ANALYSIS_FILE), 'r') as f:
+    with open(os.path.join(ANALYSIS_RESULTS_DIR, ARTIST_RESULTS_FILE), 'r') as f:
         ARTIST_RESULTS = json.load(f)
 except OSError as e:
     ARTIST_RESULTS = {}
+
+GENRES = ['black metal', 'death metal', 'metalcore', 'stoner metal', 'thrash metal']
+
+GENRE_RESULTS = {}
+for genre in GENRES:
+    GENRE_RESULTS[genre] = {}
+
 
 # =====================================
 # - Functions
@@ -161,7 +162,6 @@ def parse_all_song_data(artists, creds):
             artist_json_files = glob.glob(os.path.join(SEARCH_RESULTS_DIR, artist['genre'], artist['artist'], '*.json'))
             parse_artist_data(artist_json_files, creds, artist_lyric_count)
             ARTIST_RESULTS[artist['artist']] = artist_lyric_count
-    save_lyric_count(ARTIST_RESULTS, ARTIST_ANALYSIS_FILE)
 
 def parse_artist_data(files, creds, artist_lyric_count):
     """Reads a directory containing files of artist data."""
@@ -175,12 +175,6 @@ def parse_lyrics(songs_file, creds, lyric_dict):
     to a specific song. The lyrics are extracted from the
     raw HTML to determine the word frequency in each song.
 
-    For this implementation, it was deemed that what was
-    significant was whether or not a word was mentioned in
-    a song. That is, each instance of a word is only counted
-    once per song. This is so certain artists, genres, or songs
-    which contain repeated choruses don't inflate the usage of
-    particular words.
     """
     with open(songs_file, 'r') as json_file:
         json_data = json.load(json_file)
@@ -191,6 +185,7 @@ def parse_lyrics(songs_file, creds, lyric_dict):
         [h.extract() for h in html('script')]
         lyrics = html.find('div', class_='lyrics').get_text().lower()
         lyrics = re.sub(r'\[.*?\]', '', lyrics)
+        lyrics = re.sub(r'[^\x00-\x7f]',r'', lyrics)
         lyrics = lyrics.translate(str.maketrans('', '', string.punctuation))
         add_counts_to_dict(lyrics.split(), lyric_dict)
 
@@ -200,53 +195,15 @@ def parse_lyrics(songs_file, creds, lyric_dict):
 # --- Utility Methods --- #
 # ----------------------- #
 
-def store_results(artists):
-    """Determine the top word counts per artist and per genre.
-
-    Gathers all of the lyrical data and compiles them in
-    a way that can be summarized in two text files, one
-    for artists, and another for genres.    
+def save_results(artists):
+    """Save the artist results and compute/save the genre results.  
     """
-    genre_counts_dict = {}
-    for genre in GENRES:
-        genre_counts_dict[genre] = {}
-
-    with open(os.path.join(ANALYSIS_RESULTS_DIR, ARTIST_ANALYSIS_FILE), 'r') as f:
-        ARTIST_RESULTS = json.load(f)
-
-    artists_json = {}
-    artist_list = []
     for artist in artists['artists']:
-        words_and_counts = []
         artist_counts = ARTIST_RESULTS[artist['artist']]
-        add_dict(genre_counts_dict[artist['genre']], artist_counts)
+        add_dict(GENRE_RESULTS[artist['genre']], artist_counts)
 
-        for entry in Counter(artist_counts).most_common(100):
-            words_and_counts.append(list(entry))
-
-        words_and_counts.reverse()
-        counts_dict = { 'title': artist['artist'], 'genre': artist['genre'], 'data': words_and_counts, 'uniques': len(artist_counts) }
-        artist_list.append(counts_dict)
-
-    save_lyric_count(genre_counts_dict, GENRE_ANALYSIS_FILE)
-
-    artists_json['artists'] = artist_list
-    save(artists_json, ANALYSIS_RESULTS_DIR, ARTIST_SUMMARY_FILE, 'w')
-
-    genres_json = {}
-    genre_list = []
-    for genre in GENRES:
-        genre_words_and_counts = []
-
-        for entry in Counter(genre_counts_dict[genre]).most_common(100):
-            genre_words_and_counts.append(list(entry))
-
-        genre_words_and_counts.reverse()
-        genre_counts_results = { 'title': genre, 'data': genre_words_and_counts, 'uniques': len(genre_counts_dict[genre]) }
-        genre_list.append(genre_counts_results)
-
-    genres_json['genres'] = genre_list
-    save(genres_json, ANALYSIS_RESULTS_DIR, GENRE_SUMMARY_FILE, 'w')
+    save_lyric_count(ARTIST_RESULTS, ARTIST_RESULTS_FILE)
+    save_lyric_count(GENRE_RESULTS, GENRE_RESULTS_FILE)
 
 def add_dict(source, supplement):
     """Combine the counts of two dictionaries into one.
@@ -274,7 +231,8 @@ def add_counts_to_dict(data_set, data_dict):
 
     data_set = remove_common_words(data_set)
     for word in data_set:
-        data_dict[word] += 1
+        strip_word = re.sub(r'[^\w\s]','', word)
+        data_dict[strip_word] += 1
 
 def send_request(url, access_token, is_api_request, data=None):
     """Send a request to the provided URL and return the results.
@@ -348,7 +306,7 @@ def remove_common_words(word_list):
                     'us', 'very', 'via', 'was', 'we', 'well', 'were', 'what', 'whatever', 'when', 'whence', 'whenever', 'where',
                     'whereafter', 'whereas', 'whereby', 'wherein', 'whereupon', 'wherever', 'whether', 'which', 'while', 'whither', 'who',
                     'whoever', 'whole', 'whom', 'whose', 'why', 'will', 'with', 'within', 'without', 'would', 'yet', 'you', 'your', 'youre', 'youll'
-                    'yours', 'yourself', 'yourselves']
+                    'yours', 'yourself', 'yourselves', 'youve']
 
     return [w for w in word_list if w not in stop_words]
 
@@ -397,10 +355,9 @@ def main():
     parse_all_song_data(artists, creds)
 
     ## Step 3 -
-    ## Save the most frequently used words on a by artist
-    ## and by genre basis. Store results in text files.
+    ## Store results as JSON object in a text file.
     print('Storage')
-    store_results(artists)
+    save_results(artists)
 
 if __name__ == "__main__":
     main()
