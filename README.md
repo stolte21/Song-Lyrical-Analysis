@@ -20,6 +20,3 @@ Here's an example of how the data for a certain artist can be displayed with a s
 
 A full working example with all my sample data can be found on my [github page](https://github.com/stolte21/Metal-Word-Clouds).
 
-## Known Issues
-The script currently doesn't handle weird characters correctly like the one in Beyoncé.
-
