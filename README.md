@@ -18,5 +18,5 @@ The results of the script will be stored in the root directory in "Analysis Resu
 Here's an example of how the data for a certain artist can be displayed with a simple ChartJS graph.
 ![Example](https://i.imgur.com/ar1WaK6.png)
 
-A full working example with all my sample data can be found on my [github page](https://github.com/stolte21/Metal-Word-Clouds).
+A full working example with all my sample data can be found on my [github page](https://stolte21.github.io/Metal-Word-Clouds/).
 
