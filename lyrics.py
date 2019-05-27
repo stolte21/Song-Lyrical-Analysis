@@ -38,6 +38,8 @@ CLIENT_ID = 'client_id'
 CLIENT_SECRET = 'client_secret'
 CLIENT_ACCESS_TOKEN = 'client_access_token'
 
+GENIUS_BASE_API_URL = 'http://api.genius.com'
+
 # In case the script has been ran before, attempt to load
 # the previous results as this will prevent re-doing uneccessary work.
 try:
@@ -46,7 +48,7 @@ try:
 except OSError as e:
     ARTIST_RESULTS = {}
 
-GENRES = ['black metal', 'death metal', 'metalcore', 'stoner metal', 'thrash metal']
+GENRES = ['Black Metal', 'Death Metal', 'Metalcore', 'Stoner Metal', 'Thrash Metal']
 
 GENRE_RESULTS = {}
 for genre in GENRES:
@@ -102,7 +104,6 @@ def search(term, client_access_token):
     Returns:
         A JSON object containing the results of the API request.
     """
-    GENIUS_BASE_API_URL = 'http://api.genius.com'
     SEARCH_URL = '/search?q='
     
     results = []
@@ -116,6 +117,24 @@ def search(term, client_access_token):
 
     return results
 
+def artist_songs(id, client_access_token):
+    """Execute the Genius API GET /artists/:id/songs method
+
+    Arguments:
+        id: The Genius artist ID
+        client_access_token: Genius token needed for API use.
+
+    Returns:
+        A JSON object containing the results of the API request.
+    """
+    ARTIST_SONGS_URL = f'/artists/{id}/songs?per_page=50&page=1'
+    FULL_URL = f'{GENIUS_BASE_API_URL}{ARTIST_SONGS_URL}'
+    response = send_request(FULL_URL, client_access_token, True)
+
+    if response:
+        return response['response']['songs']
+    else:
+        return []
 
 # --- Lyric Data Collection --- #
 # ----------------------------- #
@@ -135,15 +154,11 @@ def collect_genius_song_data(artists, creds):
         # so we can just skip that artist when that is the case.
         if not os.path.isdir(os.path.join(SEARCH_RESULTS_DIR, artist['genre'], artist['artist'])):
             print(artist['artist'])
-            results = search(artist['artist'], creds[CLIENT_ACCESS_TOKEN])
-
-            i = 1
-            for result in results:
-                # Filter the results to make sure there are only results from the artist we performed the search for
-                result['response']['hits'] = [x for x in result['response']['hits'] if x['result']['primary_artist']['name'].lower() == artist['artist'].lower()]
-                save_json(result, artist['artist'], artist['genre'], str(i))
-                i += 1
-
+            #results = search(artist['artist'], creds[CLIENT_ACCESS_TOKEN])
+            results = artist_songs(artist['id'], creds[CLIENT_ACCESS_TOKEN])
+            results = [x for x in results if x['primary_artist']['id'] == artist['id']]
+            
+            save_json(results, artist['artist'], artist['genre'], artist['artist'])
             sleep(3)    # Sleep for some amount of time so the Genius API doesn't get hammered with requests
 
 def parse_all_song_data(artists, creds):
@@ -179,9 +194,8 @@ def parse_lyrics(songs_file, creds, lyric_dict):
     with open(songs_file, 'r') as json_file:
         json_data = json.load(json_file)
 
-    body = json_data['response']['hits']
-    for result in body:
-        html = send_request(result['result']['url'], creds[CLIENT_ACCESS_TOKEN], False)
+    for song in json_data:
+        html = send_request(song['url'], creds[CLIENT_ACCESS_TOKEN], False)
         [h.extract() for h in html('script')]
         lyrics = html.find('div', class_='lyrics').get_text().lower()
         lyrics = re.sub(r'\[.*?\]', '', lyrics)
